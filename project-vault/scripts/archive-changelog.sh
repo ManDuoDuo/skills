@@ -5,10 +5,11 @@
 # 等价手工步骤见 SKILL.md §5.4。
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 FILE="$ROOT/CHANGELOG.md"
 DIR="$ROOT/99_附件/历史"
 MAX="${1:-50}"
+[ $# -le 1 ] && case "$MAX" in *[!0-9]*|""|0) false ;; *) true ;; esac || { echo "用法: archive-changelog.sh [正整数 MAX=50]" >&2; exit 2; }
 
 [ -f "$FILE" ] || { echo "找不到 $FILE" >&2; exit 1; }
 

@@ -1,55 +1,63 @@
 #!/usr/bin/env bash
-# check-links.sh — 扫描库内所有 .md 的相对链接，报告断链
-# 用法: check-links.sh   （在库内任意目录运行均可，自动定位库根）
-# 扫描前会剥掉行内代码（`...`）与围栏代码块，避免文档里的"链接写法示例"被误报。
-# 已知边界：链接中的 URL 编码空格（%20）不做解码；锚点（#xxx）只检查文件存在不检查标题。
-# 等价手工步骤见 SKILL.md §5.2。
+# check-links.sh — 校验 Markdown 内联相对链接；剥离代码示例并剪枝嵌套仓库
 set -uo pipefail
-
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 cd "$ROOT"
+TMPD="$(mktemp -d)"
+trap 'rm -rf "$TMPD"' EXIT
 
-TMP="$(mktemp)"
-trap 'rm -f "$TMP"' EXIT
-
-# 剥掉行内代码与围栏代码块，输出"可扫描文本"
-strip_code() {
-  sed -e '/^```/,/^```/d' -e 's/`[^`]*`//g' "$1"
-}
-
-MD_FILES=$(mktemp)
-trap 'rm -f "$TMP" "$MD_FILES"' EXIT
-# 剪掉 .git 目录本身，以及任何含嵌套 .git 的子目录（代码子仓库，见 SKILL.md §2.4）：
-# find 不读 .gitignore，代码库自己的文档用什么链接语法是它的自由，不该混进知识库的校验结果。
-# mindepth 1 避免把库根本身（也含 .git）剪掉。
+strip_code() { sed -e '/^[[:space:]]*```/,/^[[:space:]]*```/d' -e '/^[[:space:]]*~~~/,/^[[:space:]]*~~~/d' -e 's/`[^`]*`//g' "$1"; }
 find . -mindepth 1 -type d -name .git -prune -o \
      -type d -exec test -d '{}/.git' \; -prune -o \
      -type d -name node_modules -prune -o \
-     -name '*.md' -print > "$MD_FILES"
+     -type d -name 本地信息 -prune -o \
+     -name '*.md' -print > "$TMPD/mdfiles"
 
-# 1) 警告 wikilink 私有语法（本库约定用标准相对链接）
-WIKI=""
+: > "$TMPD/errors"
+: > "$TMPD/wiki"
 while IFS= read -r f; do
-  strip_code "$f" | grep -q '\[\[' && WIKI="$WIKI$f\n"
-done < "$MD_FILES"
-[ -n "$WIKI" ] && printf "⚠️ 发现 wikilink 语法（应改为标准相对链接）:\n$WIKI\n"
-
-# 2) 逐个检查相对链接目标
-while IFS= read -r f; do
-  strip_code "$f" | grep -oE '\]\(([^)]+)\)' | sed -E 's/^\]\(//; s/\)$//' | while IFS= read -r link; do
-    target="${link%%#*}"                       # 去锚点
-    case "$target" in
-      http*|https*|mailto:*|tel:*|/*|'<'*) continue ;;  # 外链、协议、绝对路径跳过
+  strip_code "$f" | grep -q '\[\[' && printf '%s\n' "$f" >> "$TMPD/wiki"
+  strip_code "$f" | awk '
+    function emit_link(text,   i,c,depth,start) {
+      for (i=1; i<=length(text)-1; i++) {
+        if (substr(text,i,2) != "](") continue
+        start=i+2; depth=1
+        for (i=start; i<=length(text); i++) {
+          c=substr(text,i,1)
+          if (c=="\\") { i++; continue }
+          if (c=="(") depth++
+          else if (c==")") { depth--; if (depth==0) break }
+        }
+        if (depth==0) print substr(text,start,i-start)
+      }
+    }
+    { emit_link($0) }
+  ' | while IFS= read -r raw; do
+    case "$raw" in
+      '<'*) target="$(printf '%s\n' "$raw" | sed -nE 's/^<([^>]*)>.*/\1/p')" ;;
+      *) target="$raw" ;;
     esac
-    [ -z "$target" ] && continue
-    [ -e "$(dirname "$f")/$target" ] || echo "$f -> $link" >> "$TMP"
+    target="$(printf '%s\n' "$target" | sed -E 's/[[:space:]]+"[^"]*"[[:space:]]*$//; s/\\([() ])/\\1/g')"
+    case "$target" in
+      /*|~/*|[A-Za-z]:[\\/]*)
+        printf '%s -> 禁止使用绝对路径：%s\n' "$f" "$target" >> "$TMPD/errors"
+        continue ;;
+    esac
+    if printf '%s\n' "$target" | grep -qE '^[A-Za-z][A-Za-z0-9+.-]*:'; then continue; fi
+    target="${target%%#*}"
+    [ -n "$target" ] || continue
+    decoded="$(printf '%s\n' "$target" | sed -e 's/%20/ /g' -e 's/%23/#/g' -e 's/%25/%/g' -e 's/%28/(/g' -e 's/%29/)/g' -e 's/%2F/\//g' -e 's/%2f/\//g')"
+    [ -e "$(dirname "$f")/$decoded" ] || printf '%s -> %s\n' "$f" "$raw" >> "$TMPD/errors"
   done
-done < "$MD_FILES"
+done < "$TMPD/mdfiles"
 
-if [ -s "$TMP" ]; then
-  echo "❌ 发现断链："
-  sort -u "$TMP"
-  exit 1
-else
-  echo "✅ 无断链"
+if [ -s "$TMPD/wiki" ]; then
+  echo "⚠️ 发现 wikilink 语法（应改为标准相对链接）："
+  sort -u "$TMPD/wiki"
 fi
+if [ -s "$TMPD/errors" ]; then
+  echo "❌ 发现断链或违规链接："
+  sort -u "$TMPD/errors"
+  exit 1
+fi
+echo "✅ 无断链"

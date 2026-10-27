@@ -1,0 +1,21 @@
+# {{PROJECT_NAME}} 代码库
+
+由 project-vault {{VAULT_VERSION}} 生成的最小全栈 monorepo。业务事实与决策在上级知识库，本仓只维护工程实现。
+
+## 快速开始
+
+```bash
+make install
+make test
+make lint
+make build
+make db-upgrade
+```
+
+- `make server`：FastAPI 开发服务，健康检查 `http://localhost:8000/health`。
+- `make admin`：React 管理后台，默认 `http://localhost:5173`。
+- 默认数据库是本地 SQLite，无需外部服务；生产数据库通过环境变量 `DATABASE_URL` 配置，示例见 `.env.example`。
+
+## 分层
+
+`api → service → model`；schema 做请求/响应边界，core 放配置与连接，exception 统一错误响应。测试分 unit、integration 和启动真实 HTTP 服务的 e2e。

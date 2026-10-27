@@ -1,0 +1,28 @@
+[project]
+name = "my-app"
+version = "0.1.0"
+description = "project-vault monorepo workspace"
+requires-python = ">=3.12"
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["apps/*", "packages/*"]
+
+[dependency-groups]
+dev = ["ruff>=0.8"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["web", "docker", "**/migrations"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]

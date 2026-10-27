@@ -1,0 +1,16 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  color: #172033;
+  background: #f3f6fb;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { max-width: 720px; margin: 12vh auto; padding: 2rem; }
+.eyebrow { color: #52617a; font-size: 0.75rem; letter-spacing: 0.16em; }
+section { margin-top: 2rem; padding: 2rem; background: white; border-radius: 16px; box-shadow: 0 12px 40px #24385b12; }
+strong { color: #147353; font-size: 1.25rem; }
+dl { margin-top: 1.5rem; }
+dl div { display: flex; justify-content: space-between; padding: 0.65rem 0; border-bottom: 1px solid #edf0f5; }
+dt { color: #52617a; }
+dd { margin: 0; font-family: ui-monospace, monospace; }
