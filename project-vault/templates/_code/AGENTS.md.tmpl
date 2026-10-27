@@ -1,51 +1,51 @@
 # {{PROJECT_NAME}} 工程说明
 
 > **AI 进代码目录的入口**：先读本文件（工程规则）+ [进度记录.md](进度记录.md)（当前进度与下一步）。
-> 业务事实/决策/问题在知识库（上级目录），本文件只管工程。
+> 业务事实/决策/问题在上级知识库，本文件只管工程。
 
 ## 一、工作方式约定
 
 | 项 | 约定 |
 |---|---|
-| 提交纪律 | **AI 不自行 `git commit` / `git push`**：代码与测试写完、门禁跑绿后停在工作区，用户验收后自己提交或明说"提交" |
-| 新增文件 | 结构里没有的文件/目录，AI 不得自行创建——先问，经同意再加 |
-| 分支纪律 | 动手改代码前先确认当前分支；功能开发在功能分支，PR 合并后从最新 main 重建开发分支 |
-| PR 流程 | PR 描述固定结构：概述一句＋分模块变更＋有意偏离说明＋测试与门禁＋合并/部署注意；合并后 pull 校验（log 确认＋门禁复跑＋与远端一致）＋重建开发分支＋清理废弃分支/stash |
-| 需求源先行 | 页面/功能需求变更，先改 `docs/` 下对应开发计划再动代码，不许代码先行 |
-| 进度记录 | 每完成一步更新 [进度记录.md](进度记录.md)；其顶部维护"新会话接续提示"（可直接复制给 AI 的开场语） |
+| 提交纪律 | **AI 不自行 `git commit` / `git push`**：代码与测试写完、门禁跑绿后停在工作区，用户验收后自己提交或明确授权 |
+| 新增文件 | 结构里没有的文件/目录，先说明用途并经用户同意再加，避免失控抽象 |
+| 分支纪律 | 动手前确认当前分支；功能开发在功能分支，PR 合并后从最新 main 重建开发分支 |
+| PR 流程 | 描述含概述、分模块变更、有意偏离、测试门禁、合并/部署注意；合并后 pull 校验、复跑门禁、重建分支并验证旧分支清理 |
+| 需求源先行 | 功能变更先改 `docs/` 对应开发计划再动代码；业务事实仍归上级知识库 |
+| 进度记录 | 每完成一步更新 [进度记录.md](进度记录.md)；顶部接续提示滚动重写，新日志插在 END 标记前，超 50 条运行 `make archive-progress` |
 
 ## 二、技术架构
 
-> 按实际栈填写。骨架按 uv workspace（Python）预留；换栈时保留分层、替换本表。
-
-- Monorepo：工作区成员 `apps/*` + `packages/*`
-- `apps/web-service`：后端服务，分层 `api → service → model`，`schema/` 做请求/响应边界，`core/` 基础设施，`exception/` 统一异常
-- `packages/`：共享工具包（只放真正复用的）
-- `web/`：前端（如有多端，说明各自分工）
-- `migrations/`：数据库迁移，容器启动自动 upgrade head
+- uv workspace：`apps/*` + `packages/*`；pnpm workspace：`web/*`。
+- `apps/web-service`：FastAPI＋SQLAlchemy(async)＋Alembic，分层 `api → service → model`。
+- `schema/` 做请求/响应边界，`core/` 放基础设施，`exception/` 统一异常。
+- 默认 SQLite 让骨架开箱即测；PostgreSQL 通过 `DATABASE_URL` 切换，连接串不入库。
+- `web/admin`：React＋TypeScript＋Vite，健康页通过真实 `/health` 接口判断后端状态。
 
 ## 三、常用命令
 
-> 统一走 Makefile，新命令先加 Makefile 再宣传。
-
 | 命令 | 说明 |
 |---|---|
-| `make dev` | 启动开发服务器 |
-| `make test` | 全量测试＋覆盖率（阈值 80%，红了不合并） |
-| `make db-migrate msg="..."` | 生成迁移脚本 |
-| `make db-upgrade` | 升级数据库到最新 |
+| `make install` | 安装 Python 与前端依赖 |
+| `make server` / `make admin` | 启动后端 / 管理后台 |
+| `make test` | 后端 unit＋integration＋真实 HTTP e2e，覆盖率阈值 80% |
+| `make lint` / `make build` | Python＋前端 lint / 前端生产构建 |
+| `make db-migrate msg="..."` / `make db-upgrade` | 生成迁移 / 升级到 head |
+| `make archive-progress` | 归档工程历史日志，不改变顶部接续提示 |
+
+新命令先加 Makefile 再写进文档。依赖版本与锁文件以本仓实际文件为准，不在 AGENTS 另抄一份。
 
 ## 四、测试与门禁
 
-- 测试三层：`test/unit`、`test/integration`、`test/e2e`
-- **测试数据单一来源**：钉死在仓库内的测试数据文件，禁止从 DB 排序等环境相关渠道取数
-- lint 零错误；新增端点/功能必须带测试
+- 单元测试不依赖外部服务；集成测试覆盖 ASGI 边界；e2e 必须启动真实 HTTP 服务，不用占位测试冒充。
+- 测试数据固定且由测试自造，禁止依赖本机数据、数据库排序或隐含环境状态。
+- lint 零错误；新增端点/功能必须带测试；红了不合并。
+- 测试失败要报告根因，不得删断言、改成占位测试或用临时 hack 掩盖问题。
 
 ## 五、发布口径
 
-- PR 合入 main → 自动构建 `main-<Commit>` → 测试服部署验收 → 人工卡点 → **同一构建产物**晋升生产（不重新构建）
-- 版本显示 `vX.Y.Z-test` / `vX.Y.Z-prod`；默认递增 patch，minor/major 仅用于明确大版本
+PR 合入 main → 构建不可变制品 → 测试环境验收 → 人工卡点 → **同一制品**晋升生产，不重新构建。版本显示 `vX.Y.Z-test` / `vX.Y.Z-prod`；默认递增 patch。实际部署命令与平台配置只在本仓工程文档维护，知识库发布不触发部署。
 
 ---
 
-*建立 {{DATE}}，由 project-vault 代码骨架模块生成。分层与门禁的设计依据是 project-vault Skill 自带的 references/代码库结构.md——该文件属于 Skill，不在本仓库内；换技术栈时保留分层思想、替换实现。*
+*建立 {{DATE}}，由 project-vault {{VAULT_VERSION}} 代码骨架模块生成。换技术栈时保留分层、单一事实来源与真实门禁。*

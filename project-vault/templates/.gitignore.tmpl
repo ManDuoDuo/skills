@@ -6,5 +6,18 @@ Thumbs.db
 # 代码库目录（本项目如有代码，取消注释并改成真实目录名）
 # backend/
 
-# Obsidian 本地配置（可选：不想把个人界面配置入库就取消注释）
-# .obsidian/
+# 工具本地状态，不属于知识内容
+.obsidian/
+.workbuddy/
+
+# 本地敏感信息与密钥：库内只留结构、状态和存放指针
+本地信息/
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.key
+*.pem
+*.p12
+*.pfx
+*.bundle

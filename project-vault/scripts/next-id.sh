@@ -4,9 +4,11 @@
 # 等价手工步骤见 SKILL.md §5.1（读上界 → +1 → 写回 → 使用，同一轮完成）。
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 REG="$ROOT/REGISTRY.md"
 PREFIX="${1:?用法: next-id.sh <Q|R|E|D|F>}"
+[ $# -eq 1 ] || { echo "用法: next-id.sh <Q|R|E|D|F>" >&2; exit 2; }
+case "$PREFIX" in Q|R|E|D|F) ;; *) echo "编号前缀只接受 Q/R/E/D/F" >&2; exit 2 ;; esac
 
 [ -f "$REG" ] || { echo "找不到 $REG" >&2; exit 1; }
 grep -qE "^${PREFIX}:[[:space:]]*[0-9]+" "$REG" || { echo "REGISTRY.md 中没有 ${PREFIX} 类编号" >&2; exit 1; }

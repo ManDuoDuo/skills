@@ -5,7 +5,7 @@
 # 标准流程：改开发目录 → bash scripts/selftest.sh → bash scripts/sync-install.sh
 set -euo pipefail
 
-DEV="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DEV="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 INSTALL="$HOME/.agents/skills/project-vault"
 
 mkdir -p "$(dirname "$INSTALL")"

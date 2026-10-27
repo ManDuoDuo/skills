@@ -1,28 +1,43 @@
 #!/usr/bin/env bash
-# snapshot.sh — 库快照：有改动才提交（前缀"快照:"，与人/AI 的正式提交区分），随后跑双校验
-# 用法: snapshot.sh   （库内任意位置运行；供人手动或 AI 定时任务调用）
-# 供定时任务调用时的属主原则：一个库同一时间只能有一个调度器（防止双快照互踩），
-# 属主是谁记在该库 AGENTS.md 变更记录里。
-# 无 bash 环境的手工等价：git status 看是否有变化 → 有则 git add -A && git commit -m "快照: <日期>"
-set -uo pipefail
-
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# snapshot.sh — 先体检再保存工作区；默认不推送，--push 需用户明确授权
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 cd "$ROOT"
+PUSH=0
+case "${1:-}" in "" ) ;; --push) PUSH=1 ;; *) echo "用法: snapshot.sh [--push]" >&2; exit 2 ;; esac
+[ $# -le 1 ] || { echo "用法: snapshot.sh [--push]" >&2; exit 2; }
 
-[ -d .git ] || { echo "ℹ️ 未启用 git，无需快照"; exit 0; }
+git rev-parse --is-inside-work-tree >/dev/null 2>&1 || { echo "ℹ️ 未启用 git，无需快照"; exit 0; }
+[ "$(git rev-parse --show-toplevel)" = "$ROOT" ] || { echo "❌ 脚本根目录不是 git 顶层，拒绝跨仓快照" >&2; exit 1; }
+MODE="$(sed -nE 's/^BRANCH_MODE=(single|dual)[[:space:]]*$/\1/p' vault.conf)"
+[ -n "$MODE" ] || { echo "❌ vault.conf 缺少有效 BRANCH_MODE" >&2; exit 1; }
+BRANCH="$(git branch --show-current)"
+[ -n "$BRANCH" ] || { echo "❌ detached HEAD 不允许快照" >&2; exit 1; }
+if [ "$MODE" = dual ] && [ "$BRANCH" != feat/next ]; then
+  echo "❌ dual 模式只允许在 feat/next 快照；main 只通过 publish.sh 更新" >&2
+  exit 1
+fi
 
+HOOK="$(git rev-parse --git-path hooks/pre-commit)"
+[ -x "$HOOK" ] || { echo "❌ 提交门禁未安装；先运行 bash scripts/install-hooks.sh" >&2; exit 1; }
+bash scripts/doctor.sh
 if [ -z "$(git status --porcelain)" ]; then
   echo "✅ 工作区干净，无需快照"
 else
   git add -A
-  if git commit -m "快照: $(date '+%Y-%m-%d %H:%M') 自动快照"; then
-    echo "📦 已提交快照"
-  else
-    echo "❌ 快照提交被拒（多半是 pre-commit 门禁拦下，跑 scripts/check-links.sh 与 scripts/check-registry.sh 看明细）"
-    exit 1
-  fi
+  git commit -m "快照: $(date '+%Y-%m-%d %H:%M')"
+  echo "📦 已提交到 $BRANCH"
 fi
 
-echo "── 体检 ──"
-bash scripts/check-links.sh
-bash scripts/check-registry.sh
+if [ "$PUSH" = 1 ]; then
+  git remote get-url origin >/dev/null 2>&1 || { echo "❌ --push 需要已配置 origin" >&2; exit 1; }
+  git push origin "$BRANCH"
+  git fetch origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+  [ "$(git rev-parse HEAD)" = "$(git rev-parse "refs/remotes/origin/$BRANCH")" ] || {
+    echo "❌ $BRANCH 与 origin/$BRANCH 不一致" >&2
+    exit 1
+  }
+  echo "✅ $BRANCH 与 origin/$BRANCH 一致"
+else
+  echo "ℹ️ 未推送（需要用户明确授权后使用 --push）"
+fi
